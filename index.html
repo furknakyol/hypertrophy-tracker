@@ -336,13 +336,13 @@
 // ── DATA ──────────────────────────────────────────────────────────────────
 const RAW = {
   "PAZARTESİ": {
-    "Plate Loaded Chest Press":        [70,80,90,null,null,null,null,null,null,null,null,null],
-    "Smith Machine Low Incline Press": [50,50,null,null,null,null,null,null,null,null,null,null],
-    "Chest Fly Machine":               [20,30,null,null,null,null,null,null,null,null,null,null],
-    "Shoulder Press Machine":          [15,20,null,null,null,null,null,null,null,null,null,null],
-    "Lateral Raise":                   [10,15,null,null,null,null,null,null,null,null,null,null],
-    "Triceps Pushdown":                [45,50,null,null,null,null,null,null,null,null,null,null],
-    "Overhead Rope Extension":         [35,40,null,null,null,null,null,null,null,null,null,null],
+    "Plate Loaded Chest Press":        [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Smith Machine Low Incline Press": [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Chest Fly Machine":               [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Shoulder Press Machine":          [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Lateral Raise":                   [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Triceps Pushdown":                [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Overhead Rope Extension":         [null,null,null,null,null,null,null,null,null,null,null,null],
   },
   "SALI": {
     "Lat Pulldown":              [null,null,null,null,null,null,null,null,null,null,null,null],
@@ -714,40 +714,61 @@ function showToast(msg, isErr=false) {
 }
 
 // ── EXCEL IMPORT ──────────────────────────────────────────────────────────
-document.getElementById('fileInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const wb = XLSX.read(ev.target.result, {type:'binary'});
-      let imported = 0;
-      wb.SheetNames.forEach(sheetName => {
-        const dayKey = sheetName.trim().toUpperCase();
-        if (!RAW[dayKey]) return;
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null});
-        for (let r = 2; r < rows.length; r++) {
-          const row  = rows[r];
-          const name = row[0];
-          if (!name || typeof name !== 'string' || !RAW[dayKey][name]) continue;
-          RAW[dayKey][name] = Array.from({length:12}, (_,c) => {
-            const v = row[c+1];
-            return (v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
-          });
-          imported++;
-        }
-      });
-      if (!imported) { showToast('Veri bulunamadı — sayfa adlarını kontrol et', true); return; }
-      save(); buildList();
-      if (AK) render();
-      showToast(`✓ ${imported} hareket aktarıldı`);
-    } catch(err) {
-      showToast('Hata: ' + err.message, true);
+const ALIASES = {
+  // İTİŞ — kullanıcı tanımlı anahtar kelimeler
+  "chest press":       "Plate Loaded Chest Press",
+  "incline press":     "Smith Machine Low Incline Press",
+  "chest fly":         "Chest Fly Machine",
+  "shoulder press":    "Shoulder Press Machine",
+  "lateral raise":     "Lateral Raise",
+  "triceps pushdown":  "Triceps Pushdown",
+  "triceps extension": "Overhead Rope Extension",
+  // Diğer hareketler
+  "lat pulldown":          "Lat Pulldown",
+  "wide grip row":         "Plate Loaded Wide Grip Row",
+  "cable row":             "Cable Row",
+  "romanian deadlift":     "Romanian Deadlift",
+  "rear delt":             "Cable Rear Delt Fly",
+  "incline dumbbell curl": "Incline Dumbbell Curl",
+  "cable curl":            "Cable Curl",
+  "hammer curl":           "Hammer Curl",
+  "reverse barbell curl":  "Reverse Barbell Curl",
+  "reverse curl":          "Reverse Barbell Curl",
+  "leg press":             "Leg Press",
+  "squat":                 "Smith Machine Squat",
+  "leg extension":         "Leg Extension",
+  "leg curl":              "Seated Leg Curl",
+};
+
+function resolveExerciseName(rawName, dayKey) {
+  if (!rawName || typeof rawName !== 'string') return null;
+  const cleaned = rawName.trim();
+  if (RAW[dayKey] && RAW[dayKey][cleaned] !== undefined) return cleaned;
+  const lower = cleaned.toLowerCase();
+  for (const [keyword, canonical] of Object.entries(ALIASES)) {
+    if (lower.includes(keyword)) {
+      if (RAW[dayKey] && RAW[dayKey][canonical] !== undefined) return canonical;
+      for (const d of Object.keys(RAW)) { if (RAW[d][canonical] !== undefined) return canonical; }
     }
-    e.target.value = '';
-  };
-  reader.readAsBinaryString(file);
-});
+  }
+  return null;
+}
+
+const DAY_VARIANTS = {
+  "pazartesi":"PAZARTESİ","monday":"PAZARTESİ",
+  "sali":"SALI","salı":"SALI","tuesday":"SALI",
+  "carsamba":"ÇARŞAMBA","çarşamba":"ÇARŞAMBA","wednesday":"ÇARŞAMBA",
+  "cuma":"CUMA","friday":"CUMA",
+  "cumartesi":"CUMARTESİ","saturday":"CUMARTESİ",
+};
+function resolveDayKey(sheetName) {
+  const upper = sheetName.trim().toUpperCase();
+  if (RAW[upper]) return upper;
+  const lower = sheetName.trim().toLowerCase()
+    .replace(/[İı]/g,'i').replace(/[Şş]/g,'s').replace(/[Ğğ]/g,'g')
+    .replace(/[Üü]/g,'u').replace(/[Öö]/g,'o').replace(/[Çç]/g,'c');
+  return DAY_VARIANTS[lower] || null;
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 buildList();
