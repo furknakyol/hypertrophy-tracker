@@ -8,6 +8,17 @@ Haftalık ağırlık takibi için interaktif dashboard. 12 haftalık progressive
 
 ---
 
+## 👨‍⚕️ Program Kaynağı
+
+Bu program **Dr. Güray Aydın** tarafından geliştirilmiştir.
+
+> Dr. Güray Aydın — Antrenör & Spor Hekimi
+
+📺 **Programın anlatıldığı YouTube videosu:**
+> *(https://youtu.be/Wv-WK0SDP84?si=a9BlIBc3DEbp5D0v)*
+
+---
+
 ## ✨ Özellikler
 
 - **Hareket odaklı görünüm** — Günlere göre değil hareketlere göre takip
@@ -39,13 +50,10 @@ open index.html
 
 ## 📊 Excel'den Veri Aktarma
 
-1. Excel tracker'ını aç (`.xlsx`)
-2. Dashboard'da sağ üstteki **⬆ Excel Yükle** butonuna tıkla
-3. Dosyayı seç → veriler otomatik aktarılır
-4. Veriler tarayıcıya kaydedilir
-
-> **Not:** Excel dosyasındaki sayfa adlarının değişmemiş olması gerekir:
-> `PAZARTESİ` · `SALI` · `ÇARŞAMBA` · `CUMA` · `CUMARTESİ`
+1. `guray_hypertrophy_tracker.xlsx` dosyasını indir ve aç
+2. Her gün sekmesine geç → haftalık ağırlıkları gir
+3. Dashboard'da sağ üstteki **⬆ Excel Yükle** butonuna tıkla
+4. Dosyayı seç → veriler otomatik aktarılır
 
 ---
 
@@ -77,4 +85,5 @@ Her 2 antrenman sonunda: **3x10 Cable Crunch / 3x10 Standing Calf Raise**
 hypertrophy-tracker/
 ├── index.html      # Tüm uygulama tek dosyada
 └── README.md
+├── guray_hypertrophy_tracker.xlsx    # Doldurulabilir Excel taslağı
 ```
