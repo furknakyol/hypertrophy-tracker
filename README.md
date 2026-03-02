@@ -6,7 +6,7 @@ Haftalık ağırlık takibi için interaktif dashboard. 12 haftalık progressive
 
 > **[GitHub Pages linki buraya gelecek]**
 > 
-> `https://<kullanıcı-adı>.github.io/hypertrophy-tracker`
+> `https://ismai.github.io/hypertrophy-tracker`
 
 ---
 
