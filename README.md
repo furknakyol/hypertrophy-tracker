@@ -4,7 +4,7 @@ Haftalık ağırlık takibi için interaktif dashboard. 12 haftalık progressive
 
 ## 🔗 Canlı Demo
 
-🌐 **[https://furknakyol.github.io/hypertrophy-tracker/](https://ismai.github.io/hypertrophy-tracker)**
+🌐 **[https://furknakyol.github.io/hypertrophy-tracker/](https://furknakyol.github.io/hypertrophy-tracker/)**
 
 ---
 
