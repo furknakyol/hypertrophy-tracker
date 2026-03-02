@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guray's Hypertrophy Max</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c14;
+    --surface: #0f1623;
+    --surface2: #141d2e;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --text: #e8f0ff;
+    --muted: #4a6080;
+    --success: #00ff9d;
+    --push: #ff6b35;
+    --pull: #00d4ff;
+    --legs: #a855f7;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size:40px 40px;
+    pointer-events:none; z-index:0;
+  }
+  .container { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:24px; }
+
+  /* HEADER */
+  header {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    margin-bottom:36px; padding-bottom:24px; border-bottom:1px solid var(--border);
+  }
+  .logo h1 {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(2.2rem,5vw,4rem);
+    letter-spacing:3px; line-height:1;
+    background:linear-gradient(135deg,var(--accent),#7b61ff);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+  .logo p { font-size:.75rem; letter-spacing:4px; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+  .badges { display:flex; gap:8px; align-items:center; }
+  .badge {
+    font-family:'JetBrains Mono',monospace; font-size:.65rem;
+    padding:4px 12px; border-radius:2px; letter-spacing:2px; text-transform:uppercase;
+  }
+  .badge-push { color:var(--push); border:1px solid var(--push); }
+  .badge-pull { color:var(--pull); border:1px solid var(--pull); }
+  .badge-legs { color:var(--legs); border:1px solid var(--legs); }
+
+  /* LAYOUT */
+  .layout { display:grid; grid-template-columns:280px 1fr; gap:20px; align-items:start; }
+
+  /* SIDEBAR */
+  .sidebar {
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    overflow:hidden; position:sticky; top:20px; max-height:calc(100vh - 40px); overflow-y:auto;
+  }
+  .sidebar::-webkit-scrollbar { width:4px; }
+  .sidebar::-webkit-scrollbar-track { background:transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  .sidebar-hdr {
+    padding:14px 18px; background:var(--surface2); border-bottom:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace; font-size:.65rem; letter-spacing:3px;
+    text-transform:uppercase; color:var(--muted); position:sticky; top:0; z-index:1;
+  }
+  .grp { border-bottom:1px solid var(--border); }
+  .grp:last-child { border-bottom:none; }
+  .grp-lbl {
+    padding:10px 18px; font-family:'Bebas Neue',sans-serif; font-size:.85rem;
+    letter-spacing:3px; display:flex; align-items:center; gap:8px;
+  }
+  .grp-lbl.push { color:var(--push); background:rgba(255,107,53,.06); }
+  .grp-lbl.pull { color:var(--pull); background:rgba(0,212,255,.06); }
+  .grp-lbl.legs { color:var(--legs); background:rgba(168,85,247,.06); }
+  .grp-lbl::before {
+    content:''; width:4px; height:4px; border-radius:50%; flex-shrink:0;
+  }
+  .grp-lbl.push::before { background:var(--push); }
+  .grp-lbl.pull::before { background:var(--pull); }
+  .grp-lbl.legs::before { background:var(--legs); }
+
+  .ex-btn {
+    display:flex; align-items:center; gap:6px; width:100%;
+    padding:9px 14px 9px 28px;
+    background:transparent; border:none; color:var(--muted);
+    font-family:'DM Sans',sans-serif; font-size:.8rem;
+    text-align:left; cursor:pointer; transition:all .15s;
+    border-left:2px solid transparent;
+  }
+  .ex-name { flex:1; line-height:1.3; }
+  .day-tag {
+    font-family:'JetBrains Mono',monospace; font-size:.5rem; letter-spacing:1px;
+    padding:2px 5px; border-radius:2px; opacity:.5; flex-shrink:0; border:1px solid currentColor;
+  }
+  .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .dot-on  { background:var(--success); box-shadow:0 0 6px var(--success); }
+  .dot-off { border:1px solid var(--muted); opacity:.3; }
+
+  .ex-btn:hover { background:rgba(255,255,255,.03); color:var(--text); border-left-color:var(--muted); }
+  .ex-btn.active.push { background:rgba(255,107,53,.08); color:var(--push); border-left-color:var(--push); font-weight:600; }
+  .ex-btn.active.pull { background:rgba(0,212,255,.08);  color:var(--pull); border-left-color:var(--pull); font-weight:600; }
+  .ex-btn.active.legs { background:rgba(168,85,247,.08); color:var(--legs); border-left-color:var(--legs); font-weight:600; }
+
+  /* CONTENT */
+  .content { display:flex; flex-direction:column; gap:20px; }
+
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .stat {
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:16px 20px; position:relative; overflow:hidden;
+  }
+  .stat::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  }
+  .stat.tp::before  { background:linear-gradient(90deg,var(--push),transparent); }
+  .stat.tl::before  { background:linear-gradient(90deg,var(--pull),transparent); }
+  .stat.tg::before  { background:linear-gradient(90deg,var(--legs),transparent); }
+  .stat.tw::before  { background:linear-gradient(90deg,var(--success),transparent); }
+  .stat-lbl {
+    font-family:'JetBrains Mono',monospace; font-size:.6rem; letter-spacing:2px;
+    text-transform:uppercase; color:var(--muted); margin-bottom:8px;
+  }
+  .stat-val {
+    font-family:'Bebas Neue',sans-serif; font-size:2rem; line-height:1; letter-spacing:2px;
+  }
+  .stat-val.push  { color:var(--push); }
+  .stat-val.pull  { color:var(--pull); }
+  .stat-val.legs  { color:var(--legs); }
+  .stat-val.green { color:var(--success); }
+  .stat-val span  { font-size:.9rem; color:var(--muted); }
+  .stat-sub { font-size:.7rem; color:var(--muted); margin-top:4px; }
+
+  .chart-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:28px; position:relative; overflow:hidden;
+  }
+  .chart-card::after {
+    content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+    background:radial-gradient(circle at 50% 0%,rgba(0,212,255,.03),transparent 60%);
+    pointer-events:none;
+  }
+  .chart-title-row { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+  .chart-title { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; letter-spacing:2px; line-height:1; }
+  .chart-sub {
+    font-family:'JetBrains Mono',monospace; font-size:.6rem;
+    letter-spacing:2px; text-transform:uppercase; margin-top:6px;
+  }
+  .chart-wrap { position:relative; height:340px; }
+
+  .empty-state {
+    height:340px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px; color:var(--muted);
+  }
+  .empty-text {
+    font-family:'JetBrains Mono',monospace; font-size:.75rem;
+    letter-spacing:2px; text-transform:uppercase; text-align:center; line-height:1.8;
+  }
+
+  .tbl-card { background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .tbl-hdr {
+    padding:14px 20px; background:var(--surface2); border-bottom:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace; font-size:.65rem; letter-spacing:3px;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .wk-grid { display:grid; grid-template-columns:repeat(12,1fr); }
+  .wk-cell {
+    padding:12px 8px; text-align:center;
+    border-right:1px solid var(--border); cursor:pointer; transition:background .15s;
+  }
+  .wk-cell:last-child { border-right:none; }
+  .wk-cell:hover { background:rgba(255,255,255,.03); }
+  .wk-num { font-family:'JetBrains Mono',monospace; font-size:.55rem; color:var(--muted); letter-spacing:1px; margin-bottom:6px; }
+  .wk-val { font-family:'Bebas Neue',sans-serif; font-size:1.3rem; letter-spacing:1px; }
+  .wk-val.push { color:var(--push); } .wk-val.pull { color:var(--pull); } .wk-val.legs { color:var(--legs); }
+  .wk-val.empty { color:var(--border); }
+  .wk-delta { font-family:'JetBrains Mono',monospace; font-size:.55rem; margin-top:3px; min-height:.9em; }
+  .du { color:var(--success); } .dd { color:#ff4757; } .ds { color:var(--muted); }
+
+  .placeholder {
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:80px 28px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; text-align:center;
+  }
+  .ph-icon { font-size:4rem; opacity:.15; }
+  .ph-title { font-family:'Bebas Neue',sans-serif; font-size:1.6rem; letter-spacing:3px; color:var(--muted); }
+  .ph-sub { font-size:.8rem; color:var(--muted); opacity:.5; max-width:260px; line-height:1.6; }
+
+  /* IMPORT */
+  .import-area {
+    display:flex; align-items:center; gap:10px;
+  }
+  .import-btn {
+    font-family:'JetBrains Mono',monospace; font-size:.65rem; letter-spacing:2px;
+    text-transform:uppercase; padding:8px 16px; border-radius:2px; cursor:pointer;
+    border:1px solid var(--success); color:var(--success); background:rgba(0,255,157,.06);
+    transition:all .15s;
+  }
+  .import-btn:hover { background:rgba(0,255,157,.14); }
+  #fileInput { display:none; }
+
+  .toast {
+    position:fixed; bottom:28px; right:28px; z-index:999;
+    background:var(--surface2); border:1px solid var(--border); border-radius:4px;
+    padding:14px 22px; font-family:'JetBrains Mono',monospace; font-size:.75rem;
+    letter-spacing:1px; color:var(--success);
+    transform:translateY(80px); opacity:0; transition:all .3s ease;
+    pointer-events:none;
+  }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast.err  { color:#ff4757; border-color:#ff4757; }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .fi { animation:fadeIn .2s ease forwards; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <h1>Guray's Hypertrophy Max</h1>
+      <p>Progressive Overload Tracker — 12 Hafta</p>
+    </div>
+    <div class="import-area">
+      <span class="badge badge-push">İtiş</span>
+      <span class="badge badge-pull">Çekiş</span>
+      <span class="badge badge-legs">Bacak</span>
+      <input type="file" id="fileInput" accept=".xlsx">
+      <button class="import-btn" onclick="document.getElementById('fileInput').click()">⬆ Excel Yükle</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-hdr">Hareketler</div>
+      <div id="list"></div>
+    </aside>
+    <main class="content" id="main">
+      <div class="placeholder">
+        <div class="ph-icon">📈</div>
+        <div class="ph-title">Hareket Seç</div>
+        <div class="ph-sub">Sol panelden bir hareket seçtiğinde haftalık ağırlık grafiği burada görünecek.</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const RAW = {
+  "PAZARTESİ": {
+    "Plate Loaded Chest Press":        [70,80,90,null,null,null,null,null,null,null,null,null],
+    "Smith Machine Low Incline Press": [50,50,null,null,null,null,null,null,null,null,null,null],
+    "Chest Fly Machine":               [20,30,null,null,null,null,null,null,null,null,null,null],
+    "Shoulder Press Machine":          [15,20,null,null,null,null,null,null,null,null,null,null],
+    "Lateral Raise":                   [10,15,null,null,null,null,null,null,null,null,null,null],
+    "Triceps Pushdown":                [45,50,null,null,null,null,null,null,null,null,null,null],
+    "Overhead Rope Extension":         [35,40,null,null,null,null,null,null,null,null,null,null],
+  },
+  "SALI": {
+    "Lat Pulldown":              [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Plate Loaded Wide Grip Row":[null,null,null,null,null,null,null,null,null,null,null,null],
+    "Cable Row":                 [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Incline Dumbbell Curl":     [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Cable Curl":                [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Hammer Curl":               [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Reverse Barbell Curl":      [null,null,null,null,null,null,null,null,null,null,null,null],
+  },
+  "ÇARŞAMBA": {
+    "Leg Press":          [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Smith Machine Squat":[null,null,null,null,null,null,null,null,null,null,null,null],
+    "Leg Extension":      [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Seated Leg Curl":    [null,null,null,null,null,null,null,null,null,null,null,null],
+  },
+  "CUMA": {
+    "Shoulder Press Machine":          [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Lateral Raise":                   [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Smith Machine Low Incline Press": [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Chest Fly Machine":               [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Cable Rear Delt Fly":             [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Triceps Pushdown":                [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Overhead Rope Extension":         [null,null,null,null,null,null,null,null,null,null,null,null],
+  },
+  "CUMARTESİ": {
+    "Plate Loaded Wide Grip Row":[null,null,null,null,null,null,null,null,null,null,null,null],
+    "Lat Pulldown":              [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Romanian Deadlift":         [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Cable Curl":                [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Hammer Curl":               [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Reverse Barbell Curl":      [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Leg Extension":             [null,null,null,null,null,null,null,null,null,null,null,null],
+    "Seated Leg Curl":           [null,null,null,null,null,null,null,null,null,null,null,null],
+  }
+};
+
+// ── GROUPS: unique exercise names only, with all days they appear ──────────
+const GROUPS = {
+  push: {
+    label: "İTİŞ",
+    entries: [
+      { key:"p1", name:"Plate Loaded Chest Press",        days:["PAZARTESİ"] },
+      { key:"p2", name:"Smith Machine Low Incline Press", days:["PAZARTESİ","CUMA"] },
+      { key:"p3", name:"Chest Fly Machine",               days:["PAZARTESİ","CUMA"] },
+      { key:"p4", name:"Shoulder Press Machine",          days:["PAZARTESİ","CUMA"] },
+      { key:"p5", name:"Lateral Raise",                   days:["PAZARTESİ","CUMA"] },
+      { key:"p6", name:"Triceps Pushdown",                days:["PAZARTESİ","CUMA"] },
+      { key:"p7", name:"Overhead Rope Extension",         days:["PAZARTESİ","CUMA"] },
+    ]
+  },
+  pull: {
+    label: "ÇEKİŞ",
+    entries: [
+      { key:"c1", name:"Lat Pulldown",               days:["SALI","CUMARTESİ"] },
+      { key:"c2", name:"Plate Loaded Wide Grip Row", days:["SALI","CUMARTESİ"] },
+      { key:"c3", name:"Cable Row",                  days:["SALI"] },
+      { key:"c4", name:"Romanian Deadlift",          days:["CUMARTESİ"] },
+      { key:"c5", name:"Cable Rear Delt Fly",        days:["CUMA"] },
+      { key:"c6", name:"Incline Dumbbell Curl",      days:["SALI"] },
+      { key:"c7", name:"Cable Curl",                 days:["SALI","CUMARTESİ"] },
+      { key:"c8", name:"Hammer Curl",                days:["SALI","CUMARTESİ"] },
+      { key:"c9", name:"Reverse Barbell Curl",       days:["SALI","CUMARTESİ"] },
+    ]
+  },
+  legs: {
+    label: "BACAK",
+    entries: [
+      { key:"l1", name:"Leg Press",           days:["ÇARŞAMBA"] },
+      { key:"l2", name:"Smith Machine Squat", days:["ÇARŞAMBA"] },
+      { key:"l3", name:"Leg Extension",       days:["ÇARŞAMBA","CUMARTESİ"] },
+      { key:"l4", name:"Seated Leg Curl",     days:["ÇARŞAMBA","CUMARTESİ"] },
+    ]
+  }
+};
+
+const ABBR = {PAZARTESİ:"PAZ",SALI:"SAL","ÇARŞAMBA":"ÇAR",CUMA:"CUM","CUMARTESİ":"CMT"};
+const TC   = {push:"#ff6b35", pull:"#00d4ff", legs:"#a855f7"};
+const TL   = {push:"İtiş", pull:"Çekiş", legs:"Bacak"};
+
+// Secondary colors for multi-day series (lighter/dimmer variants)
+const DAY_COLORS = [
+  {line:"#ff6b35", r:255, g:107, b:53},
+  {line:"#ffd166", r:255, g:209, b:102},
+  {line:"#00d4ff", r:0,   g:212, b:255},
+  {line:"#a855f7", r:168, g:85,  b:247},
+  {line:"#00ff9d", r:0,   g:255, b:157},
+];
+
+// Persist
+(function load() {
+  try {
+    const s = localStorage.getItem('ghm2');
+    if (!s) return;
+    const p = JSON.parse(s);
+    Object.keys(p).forEach(d => Object.keys(p[d]).forEach(e => { if(RAW[d]&&RAW[d][e]) RAW[d][e]=p[d][e]; }));
+  } catch(e){}
+})();
+function save() { try { localStorage.setItem('ghm2',JSON.stringify(RAW)); } catch(e){} }
+
+let AK=null, AT=null, AN=null, ADAYS=[], chartInst=null;
+
+// ── SIDEBAR ────────────────────────────────────────────────────────────────
+function buildList() {
+  const el = document.getElementById('list');
+  el.innerHTML = '';
+  Object.entries(GROUPS).forEach(([type, g]) => {
+    const blk = document.createElement('div'); blk.className='grp';
+    const lbl = document.createElement('div'); lbl.className=`grp-lbl ${type}`; lbl.textContent=g.label;
+    blk.appendChild(lbl);
+    g.entries.forEach(e => {
+      // has data if any day has any value
+      const on = e.days.some(d => RAW[d][e.name] && RAW[d][e.name].some(v=>v!==null));
+      // show day tags only when multiple days
+      const dayTags = e.days.length > 1
+        ? e.days.map(d=>`<span class="day-tag">${ABBR[d]}</span>`).join('')
+        : '';
+      const btn = document.createElement('button');
+      btn.className = `ex-btn${AK===e.key?' active '+type:''}`;
+      btn.innerHTML = `<span class="ex-name">${e.name}</span>${dayTags}<span class="dot ${on?'dot-on':'dot-off'}"></span>`;
+      btn.onclick = () => { AK=e.key; AT=type; AN=e.name; ADAYS=e.days; render(); };
+      blk.appendChild(btn);
+    });
+    el.appendChild(blk);
+  });
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function render() {
+  // Gather all data across days
+  const allSeries = ADAYS.map(d => ({ day: d, weights: RAW[d][AN] }));
+  const allWeights = allSeries.flatMap(s => s.weights).filter(v => v !== null);
+  const any = allWeights.length > 0;
+  const c   = TC[AT];
+  const multi = ADAYS.length > 1;
+
+  // Aggregate stats across all days
+  const s = statsMulti(allSeries);
+
+  document.getElementById('main').innerHTML = `
+    <div class="stats-row fi">
+      <div class="stat tp">
+        <div class="stat-lbl">Max Ağırlık</div>
+        <div class="stat-val ${AT}">${s.max}<span> kg</span></div>
+        <div class="stat-sub">Tüm zamanlar</div>
+      </div>
+      <div class="stat tp">
+        <div class="stat-lbl">Başlangıç</div>
+        <div class="stat-val ${AT}" style="opacity:.7">${s.first}<span> kg</span></div>
+        <div class="stat-sub">İlk kayıt</div>
+      </div>
+      <div class="stat tw">
+        <div class="stat-lbl">Toplam Artış</div>
+        <div class="stat-val green">${s.gain}<span> kg</span></div>
+        <div class="stat-sub">İlk → Son</div>
+      </div>
+      <div class="stat tp">
+        <div class="stat-lbl">Hafta Kaydı</div>
+        <div class="stat-val ${AT}">${s.count}<span> / 12</span></div>
+        <div class="stat-sub">Tamamlanan</div>
+      </div>
+    </div>
+
+    <div class="chart-card fi">
+      <div class="chart-title-row">
+        <div>
+          <div class="chart-title">${AN}</div>
+          <div class="chart-sub" style="color:${c}">${TL[AT]} — Ağırlık (kg) / Hafta${multi ? ' · '+ADAYS.map(d=>ABBR[d]).join(' + ') : ' · '+ABBR[ADAYS[0]]}</div>
+        </div>
+        ${multi ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          ${ADAYS.map((d,i)=>`<span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:1px;color:${DAY_COLORS[i].line};border:1px solid ${DAY_COLORS[i].line};padding:3px 8px;border-radius:2px;">${ABBR[d]}</span>`).join('')}
+        </div>` : ''}
+      </div>
+      ${any
+        ? `<div class="chart-wrap"><canvas id="cv"></canvas></div>`
+        : `<div class="empty-state"><div style="font-size:3rem;opacity:.2">📊</div><div class="empty-text">Henüz veri yok<br>Aşağıdan ağırlıkları gir</div></div>`
+      }
+    </div>
+
+    <div class="tbl-card fi">
+      <div class="tbl-hdr">Haftalık Ağırlıklar — Hücreye tıklayarak düzenle</div>
+      <div id="allGrids"></div>
+    </div>
+  `;
+
+  buildAllGrids(allSeries);
+  buildList();
+  if (any) buildChart(allSeries);
+}
+
+// ── GRIDS (one per day) ────────────────────────────────────────────────────
+function buildAllGrids(allSeries) {
+  const container = document.getElementById('allGrids');
+  allSeries.forEach((series, si) => {
+    const { day, weights } = series;
+    const dc = DAY_COLORS[si % DAY_COLORS.length];
+
+    if (allSeries.length > 1) {
+      const hdr = document.createElement('div');
+      hdr.style.cssText = `padding:8px 20px;font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:${dc.line};border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:rgba(${dc.r},${dc.g},${dc.b},.06);`;
+      hdr.textContent = day;
+      container.appendChild(hdr);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'wk-grid';
+    weights.forEach((v,i) => {
+      const prev = i>0 ? weights[i-1] : null;
+      let dt='', dcc='';
+      if (v!==null && prev!==null) {
+        const d=v-prev;
+        if(d>0){dt=`+${d}`;dcc='du';}
+        else if(d<0){dt=`${d}`;dcc='dd';}
+        else{dt='±0';dcc='ds';}
+      }
+      const cell = document.createElement('div');
+      cell.className='wk-cell';
+      cell.innerHTML=`
+        <div class="wk-num">H${i+1}</div>
+        <div class="wk-val ${v!==null?AT:'empty'}">${v!==null?v:'·'}</div>
+        <div class="wk-delta ${dcc}">${dt||' '}</div>
+      `;
+      cell.onclick=()=>{
+        const nv=prompt(`${day} — Hafta ${i+1} (kg):`, v!==null?v:'');
+        if(nv===null) return;
+        const p=parseFloat(nv);
+        RAW[day][AN][i]=isNaN(p)?null:p;
+        save(); render();
+      };
+      grid.appendChild(cell);
+    });
+    container.appendChild(grid);
+  });
+}
+
+// ── CHART (multi-series) ───────────────────────────────────────────────────
+function buildChart(allSeries) {
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  const canvas=document.getElementById('cv');
+  if(!canvas) return;
+  const ctx=canvas.getContext('2d');
+  const labels = Array.from({length:12},(_,i)=>`H${i+1}`);
+  const multi = allSeries.length > 1;
+
+  const datasets = allSeries.map((series, si) => {
+    const dc = DAY_COLORS[si % DAY_COLORS.length];
+    const w  = series.weights;
+    const grad = ctx.createLinearGradient(0,0,0,340);
+    grad.addColorStop(0, `rgba(${dc.r},${dc.g},${dc.b},${multi ? 0.12 : 0.25})`);
+    grad.addColorStop(1, `rgba(${dc.r},${dc.g},${dc.b},0.0)`);
+    return {
+      label: ABBR[series.day],
+      data:  w,
+      borderColor: dc.line,
+      backgroundColor: grad,
+      borderWidth: 2.5,
+      pointBackgroundColor: w.map(v=>v!==null?dc.line:'transparent'),
+      pointBorderColor:     w.map(v=>v!==null?dc.line:'transparent'),
+      pointRadius:          w.map(v=>v!==null?6:0),
+      pointHoverRadius: 10,
+      tension: 0.35,
+      fill: !multi,
+      spanGaps: false,
+      _color: dc.line,
+    };
+  });
+
+  chartInst=new Chart(ctx,{
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:450,easing:'easeInOutQuart'},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{ display: multi, labels:{ color:'#4a6080', font:{family:'JetBrains Mono',size:10}, boxWidth:12, padding:16 } },
+        tooltip:{
+          backgroundColor:'#0f1623', borderColor:'#1e2d45', borderWidth:1,
+          titleColor:'#4a6080',
+          titleFont:{family:'JetBrains Mono',size:10},
+          bodyFont:{family:'Bebas Neue',size:20},
+          padding:14,
+          callbacks:{
+            title:items=>`HAFTA ${items[0].dataIndex+1}`,
+            label:item=>{
+              const color = datasets[item.datasetIndex]._color;
+              return item.raw!==null ? `  ${item.dataset.label}  ${item.raw} kg` : `  ${item.dataset.label}  —`;
+            },
+          }
+        }
+      },
+      scales:{
+        x:{
+          grid:{color:'rgba(30,45,69,0.8)'},
+          ticks:{color:'#4a6080',font:{family:'JetBrains Mono',size:10}},
+          border:{color:'#1e2d45'}
+        },
+        y:{
+          grid:{color:'rgba(30,45,69,0.8)'},
+          ticks:{color:'#4a6080',font:{family:'JetBrains Mono',size:10},callback:v=>`${v} kg`, stepSize:5},
+          border:{color:'#1e2d45'}
+        }
+      }
+    },
+    plugins:[{
+      id:'lbl',
+      afterDatasetsDraw(chart){
+        const {ctx}=chart;
+        chart.data.datasets.forEach((ds,di)=>{
+          const color = ds._color;
+          const offset = multi ? (di===0 ? -14 : 14) : 0;
+          chart.getDatasetMeta(di).data.forEach((pt,idx)=>{
+            const val=ds.data[idx];
+            if(val===null) return;
+            ctx.save();
+            ctx.font='600 10px JetBrains Mono,monospace';
+            ctx.fillStyle=color;
+            ctx.textAlign='center'; ctx.textBaseline='bottom';
+            ctx.fillText(`${val}`,pt.x + offset, pt.y-10);
+            ctx.restore();
+          });
+        });
+      }
+    }]
+  });
+}
+
+// ── STATS ──────────────────────────────────────────────────────────────────
+function statsMulti(allSeries) {
+  const filled = allSeries.flatMap(s=>s.weights).filter(v=>v!==null);
+  if(!filled.length) return{max:'—',first:'—',gain:'—',count:0};
+  const max = Math.max(...filled);
+  // first non-null across all series
+  let first=null, last=null;
+  for(const s of allSeries) { for(const v of s.weights) { if(v!==null&&first===null){first=v;} } }
+  for(const s of allSeries) { for(const v of [...s.weights].reverse()) { if(v!==null&&last===null){last=v;} } }
+  const d = last-first;
+  return{max,first,gain:d>0?`+${d}`:d<0?`${d}`:'±0',count:filled.length};
+}
+
+buildList();
+</script>
+<div class="toast" id="toast"></div>
+
+<script>
+function showToast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr?' err':'');
+  setTimeout(()=>{ t.className='toast'; }, 3200);
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'binary'});
+      let imported = 0;
+
+      // Day sheets: PAZARTESİ, SALI, ÇARŞAMBA, CUMA, CUMARTESİ
+      wb.SheetNames.forEach(sheetName => {
+        const dayKey = sheetName.trim().toUpperCase();
+        if (!RAW[dayKey]) return;
+
+        const ws   = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+        // Row 0 = title, Row 1 = header (EGZERSİZ, Hafta1..12), Row 2+ = exercises
+        for (let r = 2; r < rows.length; r++) {
+          const row  = rows[r];
+          const name = row[0];
+          if (!name || typeof name !== 'string') continue;
+          if (!RAW[dayKey][name]) continue;
+
+          const weights = [];
+          for (let c = 1; c <= 12; c++) {
+            const v = row[c];
+            weights.push((v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) : null);
+          }
+          RAW[dayKey][name] = weights;
+          imported++;
+        }
+      });
+
+      if (imported === 0) {
+        showToast('Veri bulunamadı — sayfa adlarını kontrol et', true);
+        return;
+      }
+
+      save();
+      buildList();
+      if (AK) render();
+      showToast(`✓ ${imported} hareket aktarıldı`);
+    } catch(err) {
+      showToast('Hata: ' + err.message, true);
+    }
+    // reset so same file can be re-imported
+    e.target.value = '';
+  };
+  reader.readAsBinaryString(file);
+});
+</script>
+</body>
+</html>
