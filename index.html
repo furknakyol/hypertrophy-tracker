@@ -76,6 +76,68 @@
     transition:background .15s;
   }
   .import-btn:hover { background:rgba(0,255,157,.14); }
+  .analysis-btn {
+    font-family:'JetBrains Mono',monospace; font-size:.65rem; letter-spacing:2px;
+    text-transform:uppercase; padding:8px 16px; border-radius:2px; cursor:pointer;
+    border:1px solid #7b61ff; color:#7b61ff; background:rgba(123,97,255,.06);
+    transition:background .15s;
+  }
+  .analysis-btn:hover { background:rgba(123,97,255,.16); }
+  .analysis-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ── ANALİZ MODAL ── */
+  .analysis-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:150;
+    display:flex; align-items:flex-start; justify-content:center;
+    backdrop-filter:blur(6px); opacity:0; pointer-events:none; transition:opacity .25s;
+    padding:24px 16px; overflow-y:auto;
+  }
+  .analysis-overlay.open { opacity:1; pointer-events:all; }
+  .analysis-panel {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    width:100%; max-width:780px; padding:36px; position:relative; margin:auto;
+    transform:translateY(20px); transition:transform .25s;
+  }
+  .analysis-overlay.open .analysis-panel { transform:translateY(0); }
+  .analysis-close {
+    position:absolute; top:16px; right:20px;
+    background:none; border:none; color:var(--muted); font-size:1.4rem;
+    cursor:pointer; padding:4px 8px; border-radius:3px; transition:color .15s;
+  }
+  .analysis-close:hover { color:var(--text); }
+  .analysis-header { margin-bottom:28px; }
+  .analysis-header h2 { font-family:'Bebas Neue',sans-serif; font-size:2rem; letter-spacing:3px; background:linear-gradient(135deg,#7b61ff,var(--pull)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .analysis-header p { font-family:'JetBrains Mono',monospace; font-size:.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+  .analysis-loading { display:flex; flex-direction:column; align-items:center; gap:16px; padding:60px 0; }
+  .spinner { width:36px; height:36px; border:2px solid var(--border); border-top-color:#7b61ff; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-text { font-family:'JetBrains Mono',monospace; font-size:.7rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); }
+  .analysis-body { display:flex; flex-direction:column; gap:24px; }
+  .asec { border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .asec-title { padding:12px 18px; background:var(--surface2); font-family:'Bebas Neue',sans-serif; font-size:.95rem; letter-spacing:2px; display:flex; align-items:center; gap:10px; }
+  .asec-body { padding:18px; }
+  .strength-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .sc { background:var(--bg); border-radius:4px; padding:14px; border:1px solid var(--border); }
+  .sc-lbl { font-family:'JetBrains Mono',monospace; font-size:.55rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .sc-name { font-size:.85rem; font-weight:600; margin-bottom:8px; line-height:1.3; }
+  .sc-bar-bg { background:var(--border); border-radius:2px; height:4px; margin-bottom:6px; }
+  .sc-bar { height:4px; border-radius:2px; }
+  .sc-val { font-family:'JetBrains Mono',monospace; font-size:.65rem; color:var(--muted); }
+  .prog-list { display:flex; flex-direction:column; gap:10px; }
+  .prog-item { display:flex; align-items:center; gap:12px; }
+  .prog-name { font-size:.82rem; flex:1; min-width:0; }
+  .prog-bar-bg { flex:2; background:var(--border); border-radius:2px; height:6px; }
+  .prog-bar { height:6px; border-radius:2px; }
+  .prog-pct { font-family:'JetBrains Mono',monospace; font-size:.65rem; color:var(--muted); min-width:44px; text-align:right; }
+  .rec-list { display:flex; flex-direction:column; gap:12px; }
+  .rec-item { display:flex; gap:14px; align-items:flex-start; background:var(--bg); border-radius:4px; padding:14px; border:1px solid var(--border); }
+  .rec-icon { font-size:1.3rem; flex-shrink:0; }
+  .rec-title { font-weight:600; font-size:.85rem; margin-bottom:4px; }
+  .rec-desc { font-size:.78rem; color:var(--muted); line-height:1.65; }
+  .rec-tag { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:.55rem; letter-spacing:1px; text-transform:uppercase; padding:2px 7px; border-radius:2px; margin-top:6px; }
+  .summary-box { background:rgba(123,97,255,.07); border:1px solid rgba(123,97,255,.25); border-radius:6px; padding:18px 20px; font-size:.85rem; line-height:1.85; color:var(--text); }
+  .summary-box strong { color:#a78bfa; }
+  @media (max-width:600px) { .strength-grid { grid-template-columns:1fr 1fr; } .analysis-panel { padding:22px 16px; } }
 
   /* ── LAYOUT ── */
   .layout { display:grid; grid-template-columns:280px 1fr; gap:20px; align-items:start; }
@@ -298,6 +360,7 @@
       <span class="badge badge-legs">Bacak</span>
       <input type="file" id="fileInput" accept=".xlsx">
       <button class="import-btn" onclick="document.getElementById('fileInput').click()">⬆ Excel Yükle</button>
+      <button class="analysis-btn" id="analysisBtn" onclick="openAnalysis()">⚡ Analiz</button>
     </div>
   </header>
 
@@ -313,6 +376,23 @@
         <div class="ph-sub">Sol panelden bir hareket seçtiğinde haftalık ağırlık grafiği görünecek.</div>
       </div>
     </main>
+  </div>
+</div>
+
+<!-- ANALİZ MODAL -->
+<div class="analysis-overlay" id="analysisOverlay">
+  <div class="analysis-panel">
+    <button class="analysis-close" onclick="closeAnalysis()">✕</button>
+    <div class="analysis-header">
+      <h2>Performans Analizi</h2>
+      <p id="analysisMeta">Verilerinden otomatik oluşturuldu</p>
+    </div>
+    <div id="analysisContent">
+      <div class="analysis-loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Veriler analiz ediliyor…</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -871,6 +951,206 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
   };
   reader.readAsBinaryString(file);
 });
+
+// ── ANALİZ MOTORu (Claude API) ──────────────────────────────────────────
+function openAnalysis() {
+  document.getElementById('analysisOverlay').classList.add('open');
+  document.getElementById('analysisContent').innerHTML = `
+    <div class="analysis-loading">
+      <div class="spinner"></div>
+      <div class="loading-text">AI Analiz yapıyor…</div>
+    </div>`;
+  setTimeout(runAnalysis, 80);
+}
+function closeAnalysis() {
+  document.getElementById('analysisOverlay').classList.remove('open');
+}
+document.getElementById('analysisOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeAnalysis();
+});
+
+// Veriyi Claude API için okunabilir formata çevirir
+function buildDataSummary() {
+  const lines = [];
+  Object.entries(GROUPS).forEach(([type, g]) => {
+    const typeLabel = { push:'İTİŞ', pull:'ÇEKİŞ', legs:'BACAK' }[type];
+    lines.push(`\n## ${typeLabel}`);
+    g.entries.forEach(e => {
+      e.days.forEach(d => {
+        const weights = (RAW[d][e.name] || []);
+        const filled  = weights.map((v,i) => v !== null ? `H${i+1}:${v}kg` : null).filter(Boolean);
+        if (filled.length > 0) {
+          lines.push(`- ${e.name} (${d}): ${filled.join(', ')}`);
+        } else {
+          lines.push(`- ${e.name} (${d}): veri yok`);
+        }
+      });
+    });
+  });
+  return lines.join('\n');
+}
+
+// Yerel istatistikleri hesaplar (grafik için)
+function calcLocalStats() {
+  const groupScores = {};
+  Object.entries(GROUPS).forEach(([type, g]) => {
+    const exData = [];
+    g.entries.forEach(e => {
+      const all = e.days.flatMap(d => (RAW[d][e.name]||[]).filter(v=>v!==null));
+      if (all.length >= 2) {
+        const gain = all[all.length-1] - all[0];
+        const pct  = all[0] > 0 ? Math.round((gain/all[0])*100) : 0;
+        exData.push({ name:e.name, maxW:Math.max(...all), gain, pct, weeks:all.length });
+      }
+    });
+    groupScores[type] = exData;
+  });
+  return groupScores;
+}
+
+async function runAnalysis() {
+  const dataSummary = buildDataSummary();
+  const localStats  = calcLocalStats();
+
+  // Toplam veri kontrolü
+  const totalFilled = Object.values(localStats).flatMap(g=>g).length;
+  if (totalFilled === 0) {
+    document.getElementById('analysisContent').innerHTML = `
+      <div class="summary-box" style="text-align:center;padding:40px 20px">
+        <div style="font-size:3rem;opacity:.2;margin-bottom:16px">📊</div>
+        <div style="font-size:1rem;color:var(--muted)">Henüz analiz edilecek veri yok.<br>Birkaç antrenman kaydettikten sonra tekrar dene.</div>
+      </div>`;
+    return;
+  }
+
+  // ── İstatistik grafikleri (anında göster) ──────────────────────────
+  const typeColor = { push:'#ff6b35', pull:'#00d4ff', legs:'#a855f7' };
+  const typeLabel = { push:'İtiş', pull:'Çekiş', legs:'Bacak' };
+  const allEx = Object.entries(localStats).flatMap(([type,arr]) => arr.map(e=>({...e,type})));
+  const maxPct = Math.max(...allEx.map(e=>e.pct), 1);
+
+  const statsHTML = `
+    <div class="analysis-body" id="statsSection">
+      <!-- KAS GRUBU ÖZET -->
+      <div class="asec">
+        <div class="asec-title">💪 Kas Grubu Özeti</div>
+        <div class="asec-body">
+          <div class="strength-grid">
+            ${Object.entries(localStats).map(([type, arr]) => {
+              const avgPct = arr.length ? Math.round(arr.reduce((s,e)=>s+e.pct,0)/arr.length) : 0;
+              const maxW   = arr.length ? Math.max(...arr.map(e=>e.maxW)) : 0;
+              const badge  = arr.length === 0 ? 'Veri Yok' : avgPct >= 15 ? '🔥 Güçlü' : avgPct >= 5 ? '📈 Gelişiyor' : '⚠️ Dikkat';
+              const barW   = Math.max(4, Math.round(avgPct / Math.max(...Object.values(localStats).map(a=>a.length?Math.round(a.reduce((s,e)=>s+e.pct,0)/a.length):0),1) * 100));
+              return `<div class="sc">
+                <div class="sc-lbl">${badge}</div>
+                <div class="sc-name" style="color:${typeColor[type]}">${typeLabel[type]}</div>
+                <div class="sc-bar-bg"><div class="sc-bar" style="width:${barW}%;background:${typeColor[type]}"></div></div>
+                <div class="sc-val">${arr.length} hareket · ort. %${avgPct} artış</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- EN İYİ HAREKETLER -->
+      ${allEx.length > 0 ? `<div class="asec">
+        <div class="asec-title">📈 İlerleme Durumu</div>
+        <div class="asec-body"><div class="prog-list">
+          ${[...allEx].sort((a,b)=>b.pct-a.pct).slice(0,8).map(e=>`
+            <div class="prog-item">
+              <div class="prog-name">${e.name}</div>
+              <div class="prog-bar-bg"><div class="prog-bar" style="width:${Math.max(4,Math.round((e.pct/maxPct)*100))}%;background:${typeColor[e.type]}"></div></div>
+              <div class="prog-pct">${e.pct>=0?'+':''}${e.pct}%</div>
+            </div>`).join('')}
+        </div></div>
+      </div>` : ''}
+
+      <!-- AI ÖNERİLERİ YÜKLENIYOR -->
+      <div class="asec" id="aiSection">
+        <div class="asec-title">✨ AI Antrenör Yorumu</div>
+        <div class="asec-body">
+          <div class="analysis-loading" style="padding:32px 0">
+            <div class="spinner"></div>
+            <div class="loading-text">Claude analiz yazıyor…</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('analysisContent').innerHTML = statsHTML;
+
+  // ── Claude API çağrısı ──────────────────────────────────────────────
+  const prompt = `Sen deneyimli bir fitness antrenörü ve spor hekimisin. Aşağıda bir sporcunun 12 haftalık antrenman verisi var. Bu veriyi analiz ederek Türkçe bir değerlendirme raporu yaz.
+
+## ANTRENMAN VERİSİ
+${dataSummary}
+
+## YAZI FORMATI
+Aşağıdaki bölümleri sırayla yaz. Her bölümü başlığıyla başlat.
+
+### 💪 Genel Değerlendirme
+2-3 cümle. Sporcunun genel ilerleme durumu, güçlü ve zayıf yönler.
+
+### 🔥 En İyi Performans
+Hangi kas grubu / hareket en iyi ilerlemeyi göstermiş? Neden önemli?
+
+### ⚠️ Dikkat Edilmesi Gereken Noktalar
+Plateau'ya girmiş veya veri eksik hareketler. Somut, kısa.
+
+### 📋 Kişisel Öneriler
+3-4 madde halinde. Her öneri spesifik ve uygulanabilir olsun. Sadece bu veriye özel yaz, genel fitness tavsiyeleri değil.
+
+### 🎯 Bu Hafta İçin Öncelik
+Tek bir şey: bu hafta odaklanması gereken en önemli nokta.
+
+Kısa ve net yaz. Jargon kullanma. Motivasyonu yüksek tut.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+
+    // Markdown → HTML dönüşümü
+    const html = text
+      .split('\n')
+      .map(line => {
+        if (line.startsWith('### ')) return `<h4 style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:2px;color:var(--text);margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--border)">${line.slice(4)}</h4>`;
+        if (line.startsWith('- ') || line.startsWith('• ')) return `<div style="display:flex;gap:8px;margin:6px 0;font-size:.84rem;color:var(--text);line-height:1.6"><span style="color:#7b61ff;flex-shrink:0">▸</span><span>${line.slice(2)}</span></div>`;
+        if (line.trim() === '') return '<div style="height:4px"></div>';
+        return `<p style="font-size:.84rem;color:var(--muted);line-height:1.7;margin:4px 0">${line}</p>`;
+      })
+      .join('');
+
+    document.getElementById('aiSection').innerHTML = `
+      <div class="asec-title">✨ AI Antrenör Yorumu</div>
+      <div class="asec-body">
+        <div style="padding:4px 0">${html}</div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--muted);letter-spacing:1px">
+          POWERED BY CLAUDE · ${new Date().toLocaleDateString('tr-TR')}
+        </div>
+      </div>`;
+
+  } catch(err) {
+    document.getElementById('aiSection').innerHTML = `
+      <div class="asec-title">✨ AI Antrenör Yorumu</div>
+      <div class="asec-body">
+        <div style="color:#ff4757;font-family:'JetBrains Mono',monospace;font-size:.7rem;padding:8px 0">
+          ⚠ API bağlantısı sağlanamadı: ${err.message}<br>
+          <span style="color:var(--muted);margin-top:4px;display:block">GitHub Pages üzerinden çalışırken CORS kısıtlaması oluşabilir. Localhost'ta test etmeyi dene.</span>
+        </div>
+      </div>`;
+  }
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 buildList();
