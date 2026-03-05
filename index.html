@@ -770,6 +770,108 @@ function resolveDayKey(sheetName) {
   return DAY_VARIANTS[lower] || null;
 }
 
+// ── EXCEL OKUYUCU ─────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Dosya çok büyük — maks 10 MB', true);
+    e.target.value = ''; return;
+  }
+
+  const reader = new FileReader();
+  reader.onerror = () => showToast('❌ Dosya okunamadı — tekrar dene', true);
+
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'binary'});
+
+      const recognizedSheets = wb.SheetNames.filter(s => resolveDayKey(s));
+      if (recognizedSheets.length === 0) {
+        showToast('❌ Tanınan sayfa bulunamadı.\nSayfa adları: PAZARTESİ · SALI · ÇARŞAMBA · CUMA · CUMARTESİ olmalı', true);
+        e.target.value = ''; return;
+      }
+
+      let imported = 0, skipped = 0, skippedNames = [];
+
+      wb.SheetNames.forEach(sheetName => {
+        const dayKey = resolveDayKey(sheetName);
+        if (!dayKey) return;
+
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null});
+
+        // Veri başlangıcını bul — başlık satırlarını atla
+        let dataStartRow = 0;
+        for (let r = 0; r < Math.min(6, rows.length); r++) {
+          const firstCell = rows[r] && rows[r][0];
+          if (!firstCell) { dataStartRow = r + 1; continue; }
+          const lc = String(firstCell).toLowerCase();
+          if (lc.includes('egzersiz') || lc.includes('exercise') ||
+              lc.includes('hafta')    || lc.includes('week')     ||
+              lc.includes('program')  || lc.includes('gün')      ||
+              lc.includes('hypertrophy') || lc.includes('max')) {
+            dataStartRow = r + 1;
+          } else {
+            dataStartRow = r; break;
+          }
+        }
+
+        for (let r = dataStartRow; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row || !row[0]) continue;
+
+          const canonical = resolveExerciseName(row[0], dayKey);
+          if (!canonical) {
+            skipped++;
+            skippedNames.push(`"${String(row[0]).substring(0,30)}" (${sheetName})`);
+            continue;
+          }
+
+          const weights = [];
+          let cols = 0;
+          for (let c = 1; c < row.length && cols < 12; c++) {
+            const v = row[c];
+            if (v !== null && v !== '' && !isNaN(Number(v))) {
+              weights.push(Number(v)); cols++;
+            } else if (v === null || v === '') {
+              weights.push(null); cols++;
+            }
+          }
+          while (weights.length < 12) weights.push(null);
+          RAW[dayKey][canonical] = weights.slice(0, 12);
+          imported++;
+        }
+      });
+
+      if (imported === 0) {
+        const hint = skippedNames.length
+          ? `Tanınamayan satırlar: ${skippedNames.slice(0,3).join(', ')}${skippedNames.length>3?' …':''}`
+          : 'Hiç veri satırı bulunamadı.';
+        showToast(`❌ Veri aktarılamadı. ${hint}\nİlk sütun egzersiz adı, sonraki sütunlar haftalık ağırlık olmalı.`, true);
+        e.target.value = ''; return;
+      }
+
+      save(); buildList();
+      if (AK) render();
+      showToast(
+        skipped > 0
+          ? `✓ ${imported} hareket aktarıldı  ·  ${skipped} satır tanınamadı`
+          : `✓ ${imported} hareket aktarıldı`,
+        skipped > 0
+      );
+
+    } catch(err) {
+      const friendly = err.message && err.message.toLowerCase().includes('zip')
+        ? '❌ Dosya bozuk veya .xlsx formatında değil'
+        : `❌ Okunamadı: ${err.message}\nDosyanın .xlsx olarak kaydedildiğinden emin ol.`;
+      showToast(friendly, true);
+    }
+    e.target.value = '';
+  };
+  reader.readAsBinaryString(file);
+});
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 buildList();
 </script>
