@@ -952,16 +952,16 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
   reader.readAsBinaryString(file);
 });
 
-// ── ANALİZ MOTORu (Claude API) ──────────────────────────────────────────
+// ── ANALİZ MOTORu (Local — API gerekmez) ─────────────────────────────────
 
 function openAnalysis() {
   document.getElementById('analysisOverlay').classList.add('open');
   document.getElementById('analysisContent').innerHTML = `
     <div class="analysis-loading">
       <div class="spinner"></div>
-      <div class="loading-text">Claude analiz ediyor…</div>
+      <div class="loading-text">Veriler analiz ediliyor…</div>
     </div>`;
-  runAnalysisWithClaude();
+  setTimeout(runLocalAnalysis, 120);
 }
 
 function closeAnalysis() {
@@ -972,253 +972,304 @@ document.getElementById('analysisOverlay').addEventListener('click', function(e)
   if (e.target === this) closeAnalysis();
 });
 
-// Tüm RAW veriyi okunabilir bir özete dönüştür
-function buildWorkoutSummary() {
-  const lines = [];
+// ── YARDIMCI FONKSİYONLAR ────────────────────────────────────────────────
+
+function getExerciseStats() {
+  const result = [];
   Object.entries(GROUPS).forEach(([type, g]) => {
-    const typeLabel = { push:'İTİŞ', pull:'ÇEKİŞ', legs:'BACAK' }[type];
-    lines.push(`\n## ${typeLabel} Grubu`);
     g.entries.forEach(e => {
-      const allData = e.days.map(d => {
-        const w = (RAW[d][e.name] || []);
-        const filled = w.map((v, i) => v !== null ? `H${i+1}:${v}kg` : null).filter(Boolean);
-        return filled.length ? `${d}: ${filled.join(', ')}` : null;
-      }).filter(Boolean);
-      if (allData.length > 0) {
-        lines.push(`- ${e.name}: ${allData.join(' | ')}`);
-      } else {
-        lines.push(`- ${e.name}: [veri yok]`);
+      const allW = e.days.flatMap(d => (RAW[d][e.name] || []));
+      const filled = allW.filter(v => v !== null);
+      if (filled.length === 0) { result.push({ name:e.name, type, hasData:false, days:e.days }); return; }
+
+      const first = filled[0];
+      const last  = filled[filled.length - 1];
+      const max   = Math.max(...filled);
+      const min   = Math.min(...filled);
+      const weeks = filled.length;
+      const gainAbs = last - first;
+      const gainPct = first > 0 ? Math.round((gainAbs / first) * 100) : 0;
+
+      // Trend: son 3 hafta eğimi
+      const recent = filled.slice(-3);
+      const trend = recent.length >= 2
+        ? (recent[recent.length-1] - recent[0]) / (recent.length - 1)
+        : 0;
+
+      // Tutarlılık: kaç haftada art arda artış var
+      let streak = 0, maxStreak = 0, cur = 0;
+      for (let i = 1; i < filled.length; i++) {
+        if (filled[i] > filled[i-1]) { cur++; maxStreak = Math.max(maxStreak, cur); }
+        else { cur = 0; }
       }
+      // Plateau: son 3 hafta <%3 değişim
+      const recentRange = recent.length >= 2 ? Math.max(...recent) - Math.min(...recent) : 0;
+      const isPlateau   = weeks >= 3 && recentRange / (recent[0] || 1) < 0.03;
+      // Regresyon: son haftada düşüş
+      const isRegressing = weeks >= 2 && filled[filled.length-1] < filled[filled.length-2];
+
+      result.push({ name:e.name, type, hasData:true, days:e.days,
+        first, last, max, min, weeks, gainAbs, gainPct, trend, maxStreak,
+        isPlateau, isRegressing, filled });
     });
   });
-  return lines.join('\n');
+  return result;
 }
 
-function buildStatsSummary() {
-  const stats = [];
-  Object.entries(GROUPS).forEach(([type, g]) => {
-    g.entries.forEach(e => {
-      const allWeights = e.days.flatMap(d => (RAW[d][e.name] || []).filter(v => v !== null));
-      if (allWeights.length < 2) return;
-      const first = allWeights[0];
-      const last  = allWeights[allWeights.length - 1];
-      const max   = Math.max(...allWeights);
-      const gainPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
-      stats.push({ name: e.name, type, first, last, max, weeks: allWeights.length, gainPct });
-    });
-  });
-  return stats;
+function groupAverages(stats) {
+  const g = { push:[], pull:[], legs:[] };
+  stats.filter(s => s.hasData).forEach(s => g[s.type].push(s.gainPct));
+  return Object.entries(g).map(([type, arr]) => ({
+    type,
+    label: { push:'İtiş', pull:'Çekiş', legs:'Bacak' }[type],
+    color: { push:'#ff6b35', pull:'#00d4ff', legs:'#a855f7' }[type],
+    avg:   arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null,
+    count: arr.length,
+    total: Object.values(GROUPS).find((_,i)=>Object.keys(GROUPS)[i]===type)?.entries.length || 0
+  }));
 }
 
-async function runAnalysisWithClaude() {
-  const workoutText = buildWorkoutSummary();
-  const stats       = buildStatsSummary();
-  const totalExercises = Object.values(GROUPS).flatMap(g => g.entries).length;
-  const recordedCount  = stats.length;
+// ── ANA ANALİZ FONKSİYONU ────────────────────────────────────────────────
 
-  // Veri yoksa API çağrısı yapma
-  if (recordedCount === 0) {
-    renderNoDataState();
+function runLocalAnalysis() {
+  const stats      = getExerciseStats();
+  const withData   = stats.filter(s => s.hasData);
+  const noData     = stats.filter(s => !s.hasData);
+  const gAvg       = groupAverages(stats);
+  const totalEx    = stats.length;
+
+  if (withData.length === 0) {
+    document.getElementById('analysisContent').innerHTML = `
+      <div class="analysis-body">
+        <div class="summary-box" style="text-align:center;padding:40px;">
+          <div style="font-size:3rem;margin-bottom:16px;opacity:.3;">📊</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">Henüz veri yok</div>
+          <div style="font-size:.83rem;color:var(--muted);line-height:1.7;">Ağırlıklarını kaydetmeye başladıktan sonra analiz buraya yansıyacak.</div>
+        </div>
+      </div>`;
+    document.getElementById('analysisMeta').textContent = 'Veri girilmemiş';
     return;
   }
 
-  // İstatistik özeti oluştur
-  const statLines = stats
-    .sort((a,b) => b.gainPct - a.gainPct)
-    .map(s => `${s.name} (${s.type}): ${s.weeks} hafta, ${s.first}→${s.last} kg, max ${s.max} kg, %${s.gainPct} artış`)
-    .join('\n');
+  // ── SKORLAR ──────────────────────────────────────────────────────────
+  const sorted       = [...withData].sort((a,b) => b.gainPct - a.gainPct);
+  const plateaus     = withData.filter(s => s.isPlateau);
+  const regressing   = withData.filter(s => s.isRegressing && !s.isPlateau);
+  const strongGroup  = [...gAvg].filter(g => g.count > 0).sort((a,b) => (b.avg||0) - (a.avg||0))[0];
+  const weakGroup    = [...gAvg].filter(g => g.count > 0).sort((a,b) => (a.avg||0) - (b.avg||0))[0];
+  const coverage     = Math.round((withData.length / totalEx) * 100);
+  const avgGain      = Math.round(withData.reduce((s,e)=>s+e.gainPct,0) / withData.length);
+  const maxWeeks     = Math.max(...withData.map(s => s.weeks));
+  const maxGainEx    = sorted[0];
+  const topStreakEx  = [...withData].sort((a,b) => b.maxStreak - a.maxStreak)[0];
 
-  const prompt = `Aşağıdaki gerçek antrenman verilerini analiz et. Sen deneyimli bir spor hekimi ve antrenörsün.
+  // ── GENEL DEĞERLENDİRME METNİ ────────────────────────────────────────
+  let genelYorum = '';
+  if (avgGain >= 20)      genelYorum = `Genel ilerleme mükemmel — ortalama <strong>%${avgGain}</strong> artış, bu yüksek bir rakam. Progressive overload tam çalışıyor.`;
+  else if (avgGain >= 10) genelYorum = `Solid bir ilerleme var — ortalama <strong>%${avgGain}</strong> artış. Birkaç harekette ivme daha da artırılabilir.`;
+  else if (avgGain >= 3)  genelYorum = `Ilımlı bir ilerleme görünüyor — ortalama <strong>%${avgGain}</strong>. Ağırlık artışlarını biraz daha agresif tutmayı düşünebilirsin.`;
+  else                    genelYorum = `İlerleme henüz düşük (%${avgGain}). Bu normal — ya program yeni başladı, ya ağırlıklar çok muhafazakâr seçiliyor, ya da veri girişi eksik.`;
 
-## HAM VERİ (Haftalık ağırlıklar)
-${workoutText}
+  if (plateaus.length > 0) genelYorum += ` <strong>${plateaus.length}</strong> harekette plateau tespit edildi.`;
+  if (coverage < 60)        genelYorum += ` Hareketlerin yalnızca <strong>%${coverage}</strong>'i kayıtlı — daha fazla veri gir.`;
 
-## ÖZET İSTATİSTİKLER (artışa göre sıralı)
-${statLines}
+  // ── ÖNERİLER ─────────────────────────────────────────────────────────
+  const recs = [];
 
-## GÖREV
-Aşağıdaki JSON formatında yanıt ver (başka hiçbir şey yazma, sadece JSON):
-
-{
-  "genel_degerlendirme": "2-3 cümle genel antrenman yorumu. Somut gözlemlere dayan.",
-  "guclu_bolge": {
-    "bolge": "İtiş/Çekiş/Bacak",
-    "aciklama": "Neden güçlü, hangi sayılara dayanıyor"
-  },
-  "zayif_bolge": {
-    "bolge": "İtiş/Çekiş/Bacak",
-    "aciklama": "Neden zayıf veya eksik, sayısal kanıt"
-  },
-  "oneriler": [
-    {
-      "baslik": "Kısa öneri başlığı",
-      "aciklama": "Bu öneriyi neden veriyorsun, hangi veriye dayanıyor, ne yapmalı",
-      "oncelik": "yüksek/orta/düşük",
-      "kategori": "Plateau/Denge/Teknik/Beslenme/Dinlenme/Süreklilik"
-    }
-  ],
-  "motivasyon": "Sporcuya özel, veriye dayalı 1 cümle motivasyon mesajı"
-}
-
-Kurallar:
-- Türkçe yaz
-- Veriye dayalı ol — genel klişe söyleme
-- 3-5 öneri ver
-- Eğer bir harekette plateau varsa (3+ hafta sabit), bunu özellikle belirt
-- Eksik veri olan hareketleri kaydetmesini söyle`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+  // 1. Plateau hareketler
+  plateaus.forEach(p => {
+    recs.push({
+      icon: '📊',
+      prio: 'yüksek',
+      prioBg: 'rgba(255,71,87,.12)', prioColor: '#ff4757',
+      cat: 'Plateau',
+      baslik: `${p.name} — Plateau'ya girdi`,
+      aciklama: `Son ${p.weeks} haftadaki aralık: ${p.min}–${p.max} kg (<%3 değişim). `
+        + (p.last >= 60
+          ? `Ağırlığı 2.5 kg artırmayı dene; başaramazsan set sayısını 1 artır.`
+          : `2.5 kg artış dene ya da mevcut ağırlıkta 1 set daha ekle.`)
     });
+  });
 
-    if (!response.ok) {
-      throw new Error(`API hatası: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const rawText = data.content.map(b => b.text || '').join('');
-
-    // JSON parse et
-    const cleanText = rawText.replace(/```json|```/g, '').trim();
-    const analysis  = JSON.parse(cleanText);
-
-    renderAnalysis(analysis, stats, recordedCount, totalExercises);
-
-  } catch (err) {
-    renderFallbackAnalysis(stats, recordedCount, totalExercises, err.message);
+  // 2. Kas grubu dengesizliği
+  if (strongGroup && weakGroup && strongGroup.type !== weakGroup.type
+      && strongGroup.avg !== null && weakGroup.avg !== null
+      && (strongGroup.avg - weakGroup.avg) >= 8) {
+    recs.push({
+      icon: '⚖️',
+      prio: 'orta',
+      prioBg: 'rgba(255,209,102,.12)', prioColor: '#ffd166',
+      cat: 'Denge',
+      baslik: `${weakGroup.label} grubu ${strongGroup.label}'ın gerisinde`,
+      aciklama: `${strongGroup.label}'da ortalama %${strongGroup.avg} artış var, ${weakGroup.label}'da ise %${weakGroup.avg||0}. `
+        + `${weakGroup.label} antrenmanlarında daha yüksek başlangıç ağırlığı seç veya ek set ekle.`
+    });
   }
-}
 
-function renderAnalysis(a, stats, recorded, total) {
-  const typeColors = { push:'#ff6b35', pull:'#00d4ff', legs:'#a855f7' };
-  const typeMap    = { 'İtiş':'push', 'Çekiş':'pull', 'Bacak':'legs', 'push':'push', 'pull':'pull', 'legs':'legs' };
-  const prioColors = { yüksek:'#ff4757', orta:'#ffd166', düşük:'#00d4ff' };
+  // 3. Regresyon
+  regressing.forEach(r => {
+    recs.push({
+      icon: '📉',
+      prio: 'orta',
+      prioBg: 'rgba(255,71,87,.08)', prioColor: '#ff6b6b',
+      cat: 'Regresyon',
+      baslik: `${r.name} son haftada geriledi`,
+      aciklama: `${r.filled[r.filled.length-2]} kg'dan ${r.filled[r.filled.length-1]} kg'a düştü. `
+        + `Aşırı yorgunluk, uyku eksikliği veya yetersiz beslenme olabilir. Bu harekete önümüzdeki 2 haftada odaklan.`
+    });
+  });
+
+  // 4. En iyi momentum
+  if (maxGainEx && maxGainEx.gainPct >= 10) {
+    recs.push({
+      icon: '🚀',
+      prio: 'düşük',
+      prioBg: 'rgba(0,255,157,.08)', prioColor: '#00ff9d',
+      cat: 'Güçlü Alan',
+      baslik: `${maxGainEx.name} hareketi çok iyi ilerliyor`,
+      aciklama: `${maxGainEx.weeks} haftada ${maxGainEx.first} → ${maxGainEx.last} kg (%${maxGainEx.gainPct} artış). `
+        + `Bu momentum'u koru — her antrenmanda en az 0 veya +2.5 kg hedefle.`
+    });
+  }
+
+  // 5. Eksik veri
+  if (noData.length > 0) {
+    recs.push({
+      icon: '📝',
+      prio: 'orta',
+      prioBg: 'rgba(168,85,247,.1)', prioColor: '#a855f7',
+      cat: 'Veri Eksik',
+      baslik: `${noData.length} hareket için hiç veri girilmemiş`,
+      aciklama: `${noData.slice(0,4).map(n=>n.name).join(', ')}${noData.length>4?` ve ${noData.length-4} diğeri`:''} kayıtlı değil. `
+        + `Her antrenman bittikten sonra 2 dakika ayırıp tüm ağırlıkları gir — trend ancak böyle görünür.`
+    });
+  }
+
+  // 6. Süreklilik (düşük hafta sayısı)
+  const lowWeekEx = withData.filter(s => s.weeks <= 2);
+  if (lowWeekEx.length >= 3) {
+    recs.push({
+      icon: '📅',
+      prio: 'düşük',
+      prioBg: 'rgba(0,212,255,.08)', prioColor: '#00d4ff',
+      cat: 'Süreklilik',
+      baslik: `${lowWeekEx.length} harekette yalnızca 1–2 hafta veri var`,
+      aciklama: `Anlamlı trend görmek için en az 4 hafta veriye ihtiyaç var. Kaydı düzenli tutmaya devam et.`
+    });
+  }
+
+  if (recs.length === 0) {
+    recs.push({
+      icon: '🏆',
+      prio: 'düşük',
+      prioBg: 'rgba(0,255,157,.08)', prioColor: '#00ff9d',
+      cat: 'Mükemmel',
+      baslik: 'Tüm hareketlerde düzenli artış var',
+      aciklama: 'Her hafta ağırlık artışı kaydediyorsun ve plateau yok. Bu ritmi koru — 12. haftada maksimum test yap.'
+    });
+  }
+
+  // ── MOTİVASYON ───────────────────────────────────────────────────────
+  let motivasyon = '';
+  if (avgGain >= 15)      motivasyon = `${maxWeeks}. haftadasın ve ${maxGainEx?.name || 'hareketlerin'} ${maxGainEx?.gainPct || 0}% büyüdü — rakamlar yalan söylemez. 🔥`;
+  else if (plateaus.length > 0) motivasyon = `Plateau geçici — kaslar adapte oluyor. Küçük bir değişiklik büyük farklar yaratır. 💡`;
+  else if (avgGain >= 5)  motivasyon = `Her hafta biraz daha güçlüsün. Compound etki zamanla devasa bir fark yaratır. 📈`;
+  else                    motivasyon = `Başlangıç her zaman en zor aşama. Veriyi kaydet, program seni oraya taşır. 💪`;
+
+  // ── RENDER ───────────────────────────────────────────────────────────
   const prioLabels = { yüksek:'🔴 Yüksek', orta:'🟡 Orta', düşük:'🔵 Düşük' };
-
-  const topGainer = [...stats].sort((a,b) => b.gainPct - a.gainPct)[0];
-  const plateau   = stats.filter(s => s.weeks >= 3 && s.gainPct < 5);
 
   const html = `<div class="analysis-body">
 
-    <!-- CLAUDE YORUM KUTUSU -->
-    <div class="summary-box" style="background:rgba(123,97,255,.09);border-color:rgba(123,97,255,.3);">
+    <!-- ÖZET KUTU -->
+    <div class="summary-box">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <span style="font-size:1.1rem;">🤖</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:#a78bfa;">Claude Analizi</span>
+        <span style="font-size:1.1rem;">📊</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:#a78bfa;">Genel Değerlendirme</span>
       </div>
-      <p style="line-height:1.8;font-size:.87rem;">${a.genel_degerlendirme}</p>
+      <p style="line-height:1.85;font-size:.87rem;">${genelYorum}</p>
     </div>
 
-    <!-- GÜÇLÜ / ZAYIF -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-      <div class="asec">
-        <div class="asec-title" style="color:#00ff9d;">✅ Güçlü Alan</div>
-        <div class="asec-body">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:${typeColors[typeMap[a.guclu_bolge?.bolge]] || '#00ff9d'};margin-bottom:8px;">${a.guclu_bolge?.bolge || '—'}</div>
-          <div style="font-size:.8rem;color:var(--muted);line-height:1.6;">${a.guclu_bolge?.aciklama || ''}</div>
-        </div>
-      </div>
-      <div class="asec">
-        <div class="asec-title" style="color:#ff4757;">⚠️ Gelişime Açık</div>
-        <div class="asec-body">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:${typeColors[typeMap[a.zayif_bolge?.bolge]] || '#ff4757'};margin-bottom:8px;">${a.zayif_bolge?.bolge || '—'}</div>
-          <div style="font-size:.8rem;color:var(--muted);line-height:1.6;">${a.zayif_bolge?.aciklama || ''}</div>
+    <!-- KAS GRUBU SKORLARI -->
+    <div class="asec">
+      <div class="asec-title">💪 Kas Grubu Karşılaştırması</div>
+      <div class="asec-body">
+        <div class="strength-grid">
+          ${gAvg.map(g => {
+            const maxAvg = Math.max(...gAvg.map(x=>x.avg||0), 1);
+            const barW   = g.avg !== null ? Math.max(4, Math.round((g.avg/maxAvg)*100)) : 4;
+            const badge  = g.avg === null ? 'Veri yok' : g.avg >= 15 ? 'Güçlü 🔥' : g.avg >= 5 ? 'Gelişiyor' : 'Zayıf';
+            return `<div class="sc">
+              <div class="sc-lbl">${badge}</div>
+              <div class="sc-name" style="color:${g.color}">${g.label}</div>
+              <div class="sc-bar-bg"><div class="sc-bar" style="width:${barW}%;background:${g.color};transition:width 1s ease;"></div></div>
+              <div class="sc-val">${g.count > 0 ? `Ort. %${g.avg ?? 0} artış · ${g.count}/${g.count} hareket` : 'Henüz kayıt yok'}</div>
+            </div>`;
+          }).join('')}
         </div>
       </div>
     </div>
 
-    <!-- PLATEAU UYARISI (varsa) -->
-    ${plateau.length > 0 ? `<div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.3);border-radius:6px;padding:14px 18px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;color:#ff4757;margin-bottom:8px;">⚠️ PLATEAU TESPİTİ</div>
-      <div style="font-size:.82rem;color:var(--text);line-height:1.7;">${plateau.map(p => `<strong>${p.name}</strong>: ${p.weeks} haftadır ${p.last} kg civarında sabit`).join(' · ')}</div>
+    <!-- HAREKET BAZLI İLERLEME -->
+    ${sorted.length > 0 ? `<div class="asec">
+      <div class="asec-title">📈 Hareket Bazlı İlerleme</div>
+      <div class="asec-body"><div class="prog-list">
+        ${sorted.slice(0, 8).map(s => {
+          const maxGain = sorted[0].gainPct || 1;
+          const barW    = Math.max(4, Math.round((s.gainPct / maxGain) * 100));
+          const barCol  = s.isPlateau ? '#ff4757' : s.isRegressing ? '#ff6b35' : { push:'#ff6b35', pull:'#00d4ff', legs:'#a855f7' }[s.type];
+          const tag     = s.isPlateau ? ' 📊plateau' : s.isRegressing ? ' 📉gerileme' : '';
+          return `<div class="prog-item">
+            <div class="prog-name" style="font-size:.78rem;">${s.name}<span style="font-size:.6rem;color:var(--muted);margin-left:4px;">${tag}</span></div>
+            <div class="prog-bar-bg"><div class="prog-bar" style="width:${barW}%;background:${barCol};transition:width 1s ease .1s;"></div></div>
+            <div class="prog-pct" style="color:${s.gainPct>=0?barCol:'#ff4757'}">${s.gainPct>=0?'+':''}${s.gainPct}%</div>
+          </div>`;
+        }).join('')}
+      </div></div>
+    </div>` : ''}
+
+    <!-- PLATEAU / GELİŞİME AÇIK -->
+    ${plateaus.length > 0 ? `<div style="background:rgba(255,71,87,.07);border:1px solid rgba(255,71,87,.25);border-radius:6px;padding:16px 20px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;color:#ff4757;margin-bottom:10px;">⚠️ PLATEAU TESPİTİ — ${plateaus.length} hareket</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${plateaus.map(p => `<div style="font-size:.82rem;line-height:1.6;">
+          <strong>${p.name}</strong>: Son ${p.weeks} hafta ${p.min}–${p.max} kg arasında sabit
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);margin-left:6px;">→ +2.5 kg veya +1 set dene</span>
+        </div>`).join('')}
+      </div>
     </div>` : ''}
 
     <!-- KİŞİSEL ÖNERİLER -->
     <div class="asec">
       <div class="asec-title">✨ Kişisel Öneriler</div>
-      <div class="asec-body">
-        <div class="rec-list">
-          ${(a.oneriler || []).map(r => `<div class="rec-item">
-            <div>
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
-                <div class="rec-title">${r.baslik}</div>
-                <span class="rec-tag" style="background:${prioColors[r.oncelik] || '#4a6080'}22;color:${prioColors[r.oncelik] || '#4a6080'}">${prioLabels[r.oncelik] || r.oncelik}</span>
-                <span class="rec-tag" style="background:rgba(255,255,255,.05);color:var(--muted)">${r.kategori}</span>
-              </div>
-              <div class="rec-desc">${r.aciklama}</div>
+      <div class="asec-body"><div class="rec-list">
+        ${recs.slice(0,5).map(r => `<div class="rec-item">
+          <div class="rec-icon">${r.icon}</div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+              <div class="rec-title">${r.baslik}</div>
+              <span class="rec-tag" style="background:${r.prioBg};color:${r.prioColor}">${prioLabels[r.prio]}</span>
+              <span class="rec-tag" style="background:rgba(255,255,255,.04);color:var(--muted)">${r.cat}</span>
             </div>
-          </div>`).join('')}
-        </div>
-      </div>
+            <div class="rec-desc">${r.aciklama}</div>
+          </div>
+        </div>`).join('')}
+      </div></div>
     </div>
 
     <!-- MOTİVASYON -->
-    <div style="text-align:center;padding:20px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);">
-      <div style="font-size:1.5rem;margin-bottom:10px;">🔥</div>
-      <div style="font-size:.92rem;color:var(--text);font-style:italic;line-height:1.7;">"${a.motivasyon}"</div>
+    <div style="text-align:center;padding:22px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);">
+      <div style="font-size:1.4rem;margin-bottom:10px;">🔥</div>
+      <div style="font-size:.9rem;color:var(--text);font-style:italic;line-height:1.75;">"${motivasyon}"</div>
     </div>
 
   </div>`;
 
   document.getElementById('analysisContent').innerHTML = html;
-  const counted = `${recorded}/${total} hareket kaydedilmiş`;
-  document.getElementById('analysisMeta').textContent = counted;
+  document.getElementById('analysisMeta').textContent =
+    `${withData.length}/${totalEx} hareket kaydedilmiş · ${maxWeeks} hafta · ort. %${avgGain} artış`;
 }
 
-// API başarısız olursa — lokal mantık ile yedek analiz
-function renderFallbackAnalysis(stats, recorded, total, errMsg) {
-  const sorted   = [...stats].sort((a,b) => b.gainPct - a.gainPct);
-  const plateau  = stats.filter(s => s.weeks >= 3 && s.gainPct < 5);
-  const typeScores = {};
-  stats.forEach(s => {
-    if (!typeScores[s.type]) typeScores[s.type] = [];
-    typeScores[s.type].push(s.gainPct);
-  });
-  const avgByType = Object.entries(typeScores).map(([t,arr]) => ({
-    type:t, avg: Math.round(arr.reduce((s,v)=>s+v,0)/arr.length)
-  })).sort((a,b) => b.avg - a.avg);
-  const typeColors = { push:'#ff6b35', pull:'#00d4ff', legs:'#a855f7' };
-  const typeLabels = { push:'İtiş', pull:'Çekiş', legs:'Bacak' };
-
-  const html = `<div class="analysis-body">
-    <div style="background:rgba(255,71,87,.07);border:1px solid rgba(255,71,87,.2);border-radius:6px;padding:12px 16px;font-size:.75rem;color:#ff6070;font-family:'JetBrains Mono',monospace;letter-spacing:.5px;">
-      ⚠️ Claude API'ye bağlanılamadı — yerel analiz gösteriliyor. (${errMsg})
-    </div>
-    <div class="asec"><div class="asec-title">📈 Hareket Bazlı İlerleme</div><div class="asec-body"><div class="prog-list">
-      ${sorted.map(s => `<div class="prog-item">
-        <div class="prog-name" style="color:${typeColors[s.type]}">${s.name}</div>
-        <div class="prog-bar-bg"><div class="prog-bar" style="width:${Math.max(4,Math.min(100,s.gainPct))}%;background:${typeColors[s.type]}"></div></div>
-        <div class="prog-pct">${s.gainPct>0?'+':''}${s.gainPct}%</div>
-      </div>`).join('')}
-    </div></div></div>
-    ${plateau.length ? `<div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.3);border-radius:6px;padding:14px 18px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;color:#ff4757;margin-bottom:8px;">⚠️ PLATEAU TESPİTİ</div>
-      <div style="font-size:.82rem;line-height:1.7;">${plateau.map(p=>`<strong>${p.name}</strong>: ${p.weeks} haftadır ${p.last} kg`).join(' · ')}</div>
-    </div>` : ''}
-    <div class="summary-box">
-      ${recorded} hareketten veri mevcut. ${avgByType[0] ? `En iyi gelişim <strong>${typeLabels[avgByType[0].type]}</strong> grubunda (ort. %${avgByType[0].avg}).` : ''} Claude API bağlandığında daha detaylı analiz alacaksın.
-    </div>
-  </div>`;
-
-  document.getElementById('analysisContent').innerHTML = html;
-}
-
-function renderNoDataState() {
-  document.getElementById('analysisContent').innerHTML = `<div class="analysis-body">
-    <div class="summary-box" style="text-align:center;padding:40px;">
-      <div style="font-size:3rem;margin-bottom:16px;opacity:.3;">📊</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">Henüz veri yok</div>
-      <div style="font-size:.83rem;color:var(--muted);line-height:1.7;">Ağırlıklarını kaydetmeye başladıktan sonra Claude seni analiz edecek.</div>
-    </div>
-  </div>`;
-}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 buildList();
